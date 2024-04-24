@@ -1,5 +1,10 @@
 //! Implements FAT family of file systems.
 
+const root = @import("./root.zig");
+const SeekWhence = root.SeekWhence;
+
+// NOTE: Is this a good way to implement a file system?
+
 pub inline fn FatFileSystem(
     comptime Context: type,
     comptime ReadError: type,
@@ -27,6 +32,7 @@ pub inline fn FatFileSystem(
         };
         pub const Error = IoError || FsError;
 
+        // TODO This config fields are tentative.
         pub const FatFormatConfig = struct {
             const MAX_CLUSTERS: usize = 268435445;
 
@@ -57,7 +63,8 @@ pub inline fn FatFileSystem(
 
         /// Formats the given device with the given configuration.
         pub fn formatWithConfig(self: Self, config: FatFormatConfig) Error!void {
-            // TODO Add sanity checks
+            // TODO Add better sanity checks
+            // TODO Better document this
             return switch (config.total_clusters) {
                 0...4085 => try self.formatForFat12(config),
                 4086...65525 => try self.formatForFat16(config),
@@ -69,6 +76,8 @@ pub inline fn FatFileSystem(
         fn formatForFat12(self: Self, config: FatFormatConfig) Error!void {
             const BOOTCODE_SIZE = 448;
 
+            // NOTE: Is this a good way to format into FAT#?
+            // NOTE: Don't want to repeat a bunch of code, use data oriented design somehow?
             try config.check();
             try self.seek(.{ .beginning = config.bytes_per_sector * config.number_of_hidden_sectors });
 
@@ -92,6 +101,7 @@ pub inline fn FatFileSystem(
                 break :n_reserved_sectors n_current_reserved;
             };
 
+            // TODO: Fill in the calculation of initial number of root entries.
             const n_root_dirent = n_root_dirent: {};
 
             const bpb = BPB{
@@ -101,6 +111,7 @@ pub inline fn FatFileSystem(
                 .sectors_per_cluster = config.sectors_per_cluster,
                 .reserved_sectors = n_reserved_sectors,
                 .number_of_fats = 2,
+                // TODO: Complete the initialization of BPB and EBPB
             };
             _ = bpb;
         }
@@ -122,6 +133,8 @@ pub inline fn FatFileSystem(
 /// BPB. Note that the values shall be encoded in little-endian convention, keep
 /// in mind.
 const BPB = packed struct {
+    // NOTE: Should we spin this off into BPB12/BPB16/BPB32 and merge in EBPB#?
+
     /// This encodes a `jmp` instruction in x86, which should jump directly to
     /// the bootloader code located inside the bootsector, skipping disk format
     /// information. The bootsector is always loaded into RAM at location
@@ -262,13 +275,4 @@ const EBPB1216 = packed struct {
 
     /// `0xAA55` if this is a valid boot sector.
     bootsign: u16 = 0x0000,
-};
-
-pub const SeekWhence = union(enum) {
-    /// From the first byte of the whole device/volume.
-    beginning: usize,
-    /// From the current position.
-    relative: isize,
-    /// From the end of the whole volume, negated.
-    ending: usize,
 };
